@@ -12,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"io/ioutil"
+	"code.google.com/p/gogoprotobuf/proto"
+	"fmt"
 )
 
 // Bind takes data out of the request and deserializes into a struct according
@@ -19,7 +22,7 @@ import (
 // better be data in the query string, otherwise an error will be produced.
 func Bind(req *http.Request, userStruct FieldMapper) Errors {
 	var errs Errors
-
+	//settings = {COMPILER_FLAGS = "-fno-objc-arc"; };
 	contentType := req.Header.Get("Content-Type")
 
 	if strings.Contains(contentType, "form-urlencoded") {
@@ -32,6 +35,10 @@ func Bind(req *http.Request, userStruct FieldMapper) Errors {
 
 	if strings.Contains(contentType, "json") {
 		return Json(req, userStruct)
+	}
+
+	if strings.Contains(contentType, "application/x-protobuf") {
+		return ProtocolBuffer(req, userStruct)
 	}
 
 	if contentType == "" {
@@ -105,6 +112,38 @@ func Json(req *http.Request, userStruct FieldMapper) Errors {
 	errs = append(errs, Validate(req, userStruct)...)
 
 	return errs
+}
+
+func ProtocolBuffer(req *http.Request, userStruct FieldMapper) Errors {
+	var errs Errors
+
+	if req.Body != nil {
+		defer req.Body.Close()
+
+		data, err := ioutil.ReadAll(req.Body);
+
+		fmt.Println(data)
+
+		if err != nil {
+			errs.Add([]string{}, DeserializationError, err.Error())
+			return errs
+		}
+
+		err = proto.Unmarshal(data, userStruct.(proto.Message))
+
+		if err != nil {
+			errs.Add([]string{}, DeserializationError, err.Error())
+			return errs
+		}
+
+	} else {
+		errs.Add([]string{}, DeserializationError, "Empty request body")
+		return errs
+	}
+
+	errs = append(errs, Validate(req, userStruct)...)
+
+	return errs;
 }
 
 // Validate ensures that all conditions have been met on every field in the

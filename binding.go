@@ -17,6 +17,8 @@ import (
 	"fmt"
 )
 
+type requestBinder func(req *http.Request, userStruct FieldMapper) Errors
+
 // Bind takes data out of the request and deserializes into a struct according
 // to the Content-Type of the request. If no Content-Type is specified, there
 // better be data in the query string, otherwise an error will be produced.
@@ -57,6 +59,12 @@ func Bind(req *http.Request, userStruct FieldMapper) Errors {
 // Form deserializes form data out of the request into a struct you provide.
 // This function invokes data validation after deserialization.
 func Form(req *http.Request, userStruct FieldMapper) Errors {
+	return formBinder(req, userStruct)
+}
+
+var formBinder requestBinder = defaultFormBinder
+
+func defaultFormBinder(req *http.Request, userStruct FieldMapper) Errors {
 	var errs Errors
 
 	parseErr := req.ParseForm()
@@ -72,6 +80,12 @@ func Form(req *http.Request, userStruct FieldMapper) Errors {
 // files into a struct you provide. Files should be deserialized into
 // *multipart.FileHeader fields.
 func MultipartForm(req *http.Request, userStruct FieldMapper) Errors {
+	return multipartFormBinder(req, userStruct)
+}
+
+var multipartFormBinder requestBinder = defaultMultipartFormBinder
+
+func defaultMultipartFormBinder(req *http.Request, userStruct FieldMapper) Errors {
 	var errs Errors
 
 	multipartReader, err := req.MultipartReader()
@@ -95,6 +109,12 @@ func MultipartForm(req *http.Request, userStruct FieldMapper) Errors {
 // using the standard encoding/json package (which uses reflection).
 // This function invokes data validation after deserialization.
 func Json(req *http.Request, userStruct FieldMapper) Errors {
+	return jsonBinder(req, userStruct)
+}
+
+var jsonBinder requestBinder = defaultJsonBinder
+
+func defaultJsonBinder(req *http.Request, userStruct FieldMapper) Errors {
 	var errs Errors
 
 	if req.Body != nil {
@@ -374,7 +394,7 @@ func bindForm(req *http.Request, userStruct FieldMapper, formData map[string][]s
 				continue
 			}
 			if binder, ok := fieldPointer.(Binder); ok {
-				errs = binder.Bind(strs, errs)
+				errs = binder.Bind(fieldName, strs, errs)
 				continue
 			}
 		}
@@ -386,7 +406,7 @@ func bindForm(req *http.Request, userStruct FieldMapper, formData map[string][]s
 		}
 
 		if fieldSpec.Binder != nil {
-			errs = fieldSpec.Binder(strs, errs)
+			errs = fieldSpec.Binder(fieldName, strs, errs)
 			continue
 		}
 
@@ -727,16 +747,16 @@ type (
 		// to the field type; in other words, this field is populated
 		// by executing this function. Useful when the custom type doesn't
 		// implement the Binder interface.
-		Binder func([]string, Errors) Errors
+		Binder func(string, []string, Errors) Errors
 	}
 
 	// Binder is an interface which can deserialize itself from a slice of string
 	// coming from the request. Implement this interface so the type can be
 	// populated from form data in HTTP requests.
 	Binder interface {
-		// Bind populates the type with data in []string, which comes from the
-		// HTTP request.
-		Bind([]string, Errors) Errors
+		// Bind populates the type with data in []string which comes from the
+		// HTTP request. The first argument is the field name.
+		Bind(string, []string, Errors) Errors
 	}
 
 	// Validator can be implemented by your type to handle some

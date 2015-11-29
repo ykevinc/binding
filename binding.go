@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 	"io/ioutil"
-	"code.google.com/p/gogoprotobuf/proto"
+	"github.com/gogo/protobuf/proto"
 	"fmt"
 )
 
